@@ -1,5 +1,6 @@
 package com.booleanuk.OrderService.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -12,6 +13,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @Entity
 @Table(name = "orders")
+@JsonIgnoreProperties(value={"order"}, ignoreUnknown = true)
 public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -27,6 +29,18 @@ public class Order {
     private boolean processed;
     @Column
     private int total;
+
+    @Override
+    public String toString() {
+        return "Order{" +
+                "id=" + id +
+                ", product='" + product + '\'' +
+                ", quantity=" + quantity +
+                ", amount=" + amount +
+                ", processed=" + processed +
+                ", total=" + total +
+                '}';
+    }
 
     public Order(int id) {
         this.id = id;

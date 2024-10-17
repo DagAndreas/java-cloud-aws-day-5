@@ -2,6 +2,7 @@ package com.booleanuk.OrderService.controllers;
 
 
 import com.booleanuk.OrderService.models.Order;
+import com.booleanuk.OrderService.repositories.OrderRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,33 +34,46 @@ public class OrderController {
     private String topicArn;
     private String eventBusName;
 
-    public OrderController() {
+    private final OrderRepository orderRepository;
+
+    public OrderController(OrderRepository orderRepository) {
         this.sqsClient = SqsClient.builder().build();
         this.snsClient = SnsClient.builder().build();
         this.eventBridgeClient = EventBridgeClient.builder().build();
 
-        this.queueUrl = "";
-        this.topicArn = "";
-        this.eventBusName = "";
+        this.queueUrl = "https://sqs.eu-west-1.amazonaws.com/637423341661/dagOrderQueue";
+        this.topicArn = "arn:aws:sns:eu-west-1:637423341661:dagOrderCreatedTopic";
+        this.eventBusName = "dagCustomEventBus";
 
         this.objectMapper = new ObjectMapper();
+
+        this.orderRepository = orderRepository;
     }
+
 
     @GetMapping
     public ResponseEntity<String> GetAllOrders() {
+        // bygg den request: hent alle orders
         ReceiveMessageRequest receiveRequest = ReceiveMessageRequest.builder()
+                // fra denne url'en
                 .queueUrl(queueUrl)
                 .maxNumberOfMessages(10)
                 .waitTimeSeconds(20)
                 .build();
 
+        // hent messages fra client fra requesten vi bygde
         List<Message> messages = sqsClient.receiveMessage(receiveRequest).messages();
 
+        // for alle messages:
         for (Message message : messages) {
             try {
+                // map en json order til Order order
                 Order order = this.objectMapper.readValue(message.body(), Order.class);
+                //TODO: fix processOrder
                 this.processOrder(order);
+                System.out.println(order);
 
+                // slett en order etter at vi har processert den
                 DeleteMessageRequest deleteRequest = DeleteMessageRequest.builder()
                         .queueUrl(queueUrl)
                         .receiptHandle(message.receiptHandle())
@@ -67,8 +81,13 @@ public class OrderController {
 
                 sqsClient.deleteMessage(deleteRequest);
             } catch (JsonProcessingException e) {
-//                e.printStackTrace();
+
+                System.out.println(message.body());
+                e.printStackTrace();
             }
+        }
+        for(Message message : messages){
+            System.out.println(message.toString());
         }
         String status = String.format("%d Orders have been processed", messages.size());
         return ResponseEntity.ok(status);
@@ -101,11 +120,13 @@ public class OrderController {
             String status = "Order created, Message Published to SNS and Event Emitted to EventBridge";
             return ResponseEntity.ok(status);
         } catch (JsonProcessingException e) {
-//            e.printStackTrace();
+            e.printStackTrace();
+            System.out.println("Error when creating");
             return ResponseEntity.status(500).body("Failed to create order");
         }
     }
 
+    //TODO: fix processOrder
     private void processOrder(Order order) {
         System.out.println(order.toString());
     }
