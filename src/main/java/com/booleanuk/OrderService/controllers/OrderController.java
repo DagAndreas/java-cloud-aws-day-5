@@ -2,21 +2,19 @@ package com.booleanuk.OrderService.controllers;
 
 
 import com.booleanuk.OrderService.models.Order;
+import com.booleanuk.OrderService.models.QueueMessage;
 import com.booleanuk.OrderService.repositories.OrderRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
+import com.fasterxml.jackson.databind.util.JSONPObject;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
 import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
+import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.PublishRequest;
 import software.amazon.awssdk.services.sqs.SqsClient;
-import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
@@ -26,13 +24,13 @@ import java.util.List;
 @RestController
 @RequestMapping("orders")
 public class OrderController {
-    private SqsClient sqsClient;
-    private SnsClient snsClient;
-    private EventBridgeClient eventBridgeClient;
-    private ObjectMapper objectMapper;
-    private String queueUrl;
-    private String topicArn;
-    private String eventBusName;
+    private final SqsClient sqsClient;
+    private final SnsClient snsClient;
+    private final EventBridgeClient eventBridgeClient;
+    private final ObjectMapper objectMapper;
+    private final String queueUrl;
+    private final String topicArn;
+    private final String eventBusName;
 
     private final OrderRepository orderRepository;
 
@@ -46,7 +44,6 @@ public class OrderController {
         this.eventBusName = "dagCustomEventBus";
 
         this.objectMapper = new ObjectMapper();
-
         this.orderRepository = orderRepository;
     }
 
@@ -68,10 +65,14 @@ public class OrderController {
         for (Message message : messages) {
             try {
                 // map en json order til Order order
-                Order order = this.objectMapper.readValue(message.body(), Order.class);
+                JSONPObject obj = new JSONPObject(message.body(), QueueMessage.class);
+                QueueMessage qm = this.objectMapper.readValue(message.body(), QueueMessage.class);
+                Order order = this.objectMapper.readValue(qm.getMessage(), Order.class);
+
+                //retrieve the obj id
+
                 //TODO: fix processOrder
                 this.processOrder(order);
-                System.out.println(order);
 
                 // slett en order etter at vi har processert den
                 DeleteMessageRequest deleteRequest = DeleteMessageRequest.builder()
@@ -86,18 +87,30 @@ public class OrderController {
                 e.printStackTrace();
             }
         }
-        for(Message message : messages){
-            System.out.println(message.toString());
-        }
+
         String status = String.format("%d Orders have been processed", messages.size());
         return ResponseEntity.ok(status);
     }
 
     @PostMapping
     public ResponseEntity<String> createOrder(@RequestBody Order order) {
+//        System.out.println("Putting order:" +order);
+//        orderRepository.save(order);
+
+        // creating a new order which is unprocessed and correct total
+        Order newOrder = new Order();
+        newOrder.setProduct(order.getProduct());
+        newOrder.setQuantity(order.getQuantity());
+        newOrder.setAmount(order.getAmount());
+        newOrder.setProcessed(false);
+        newOrder.setTotal(order.getQuantity() * order.getAmount());
+
+        // should be updated with id now.
+        newOrder = orderRepository.save(newOrder);
+
         try {
-            String orderJson = objectMapper.writeValueAsString(order);
-            System.out.println(orderJson);
+            String orderJson = objectMapper.writeValueAsString(newOrder);
+            System.out.println("orderjson: " + orderJson);
             PublishRequest publishRequest = PublishRequest.builder()
                     .topicArn(topicArn)
                     .message(orderJson)
@@ -129,5 +142,10 @@ public class OrderController {
     //TODO: fix processOrder
     private void processOrder(Order order) {
         System.out.println(order.toString());
+        Order updateOrder = orderRepository.findById(order.getId()).get();
+        updateOrder.setProcessed(true);
+        System.out.println("Saved: " + updateOrder + " to db.");
+        orderRepository.save(updateOrder);
+
     }
 }

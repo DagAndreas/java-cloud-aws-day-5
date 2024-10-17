@@ -13,7 +13,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @Entity
 @Table(name = "orders")
-@JsonIgnoreProperties(value={"order"}, ignoreUnknown = true)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -30,18 +30,6 @@ public class Order {
     @Column
     private int total;
 
-    @Override
-    public String toString() {
-        return "Order{" +
-                "id=" + id +
-                ", product='" + product + '\'' +
-                ", quantity=" + quantity +
-                ", amount=" + amount +
-                ", processed=" + processed +
-                ", total=" + total +
-                '}';
-    }
-
     public Order(int id) {
         this.id = id;
     }
@@ -52,5 +40,17 @@ public class Order {
         this.amount = amount;
         this.processed = processed;
         this.total = total;
+    }
+
+    @Override
+    public String toString() {
+        return "Order{" +
+                "id=" + id +
+                ", product='" + product + '\'' +
+                ", quantity=" + quantity +
+                ", amount=" + amount +
+                ", processed=" + processed +
+                ", total=" + total +
+                '}';
     }
 }
